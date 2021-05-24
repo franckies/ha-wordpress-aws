@@ -1,3 +1,4 @@
+#============================= PROVIDER CONFIG =================================
 terraform {
   required_providers {
     aws = {
@@ -13,9 +14,11 @@ provider "aws" {
 }
 
 #============================== NETWORKING =====================================
+################################################################################
+# VPC, Internet Gateway, Subnets Module
+################################################################################
 # VPC module provision a new Elastic IP each time the VPC is destroyed and
 # re-allocated. We create an EIP once to always be the same.
-#VPC - Internet Gateway - Subnets
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
@@ -41,7 +44,9 @@ module "vpc" {
 }
 
 #============================== DATABASE =======================================
-# Security groups for RDS
+################################################################################
+# Security Groups
+################################################################################
 resource "aws_security_group" "wp-db-client-sg" {
   name = "wp-db-client-sg"
 
@@ -49,7 +54,7 @@ resource "aws_security_group" "wp-db-client-sg" {
 }
 
 resource "aws_security_group" "wp-db-sg" {
-  name = "wp-db-sg"
+  name        = "wp-db-sg"
 
   description = "Allow TCP connection on 3306 for RDS"
   vpc_id      = module.vpc.vpc_id
@@ -70,31 +75,37 @@ resource "aws_security_group" "wp-db-sg" {
   }
 }
 
-#RDS Database
-module "db" {
-  source  = "terraform-aws-modules/rds-aurora/aws"
-  version = "~> 3.0"
+################################################################################
+# RDS Aurora Module
+################################################################################
+module "aurora" {
+  source                          = "git::git@github.com:deliveryhero/tf-aws-rds-aurora.git"
+  name                            = "aurora-example-mysql"
+  engine                          = "aurora-mysql"
+  engine_version                  = "5.7.12"
+  subnet_ids                      = module.vpc.intra_subnets
+  #azs                             = ["eu-west-1a", "eu-west-1b"]
+  vpc_id                          = module.vpc.vpc_id
+  replica_count                   = 1
+  instance_type                   = "db.t2.medium"
+  apply_immediately               = true
+  skip_final_snapshot             = true
+  db_parameter_group_name         = aws_db_parameter_group.aurora_db_57_parameter_group.id
+  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.aurora_57_cluster_parameter_group.id
 
-  name           = "wordpress"
-  engine         = "aurora-postgresql"
-  engine_version = "11.9"
-  instance_type  = "db.r5.large"
+   tags = {
+      Environment = "dev"
+     Terraform   = "true"
+   }
 
-  vpc_id  = module.vpc.vpc_id
-  subnets =  module.vpc.intra_subnets
-
-  replica_count           = 2
-  allowed_security_groups = [aws_security_group.wp-db-sg.id]
-
-  storage_encrypted   = true
-  apply_immediately   = true
-  monitoring_interval = 10
-
-  db_parameter_group_name = "ha-wordpress"
-
-  tags = {
-    Environment = "dev"
-    Terraform   = "true"
-  }
 }
 
+resource "aws_db_parameter_group" "wordpress" {
+  name        = "wordpress"
+  family      = "aurora-mysql5.7"
+}
+
+resource "aws_rds_cluster_parameter_group" "ha-wordpress" {
+  name        = "ha-wordpress"
+  family      = "aurora-mysql5.7"
+}
