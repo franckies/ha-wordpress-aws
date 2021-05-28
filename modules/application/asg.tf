@@ -67,12 +67,15 @@ data "template_file" "user_data" {
 }
 
 resource "aws_launch_configuration" "launch-conf" {
-  # depends_on = [
-  #   var
-  # ]
-  name            = "${var.prefix_name}-worker"
+  # Launch Configurations cannot be updated after creation with the AWS API.
+  # In order to update a Launch Configuration, Terraform will destroy the
+  # existing resource and create a replacement.
+  #
+  # We're only setting the name_prefix here,
+  # Terraform will add a random string at the end to keep it unique.
+  name_prefix     = "${var.prefix_name}-worker"
   #ubuntu ami
-  image_id        = var.ami #"ami-0eab41619a08cc289" 
+  image_id        = "ami-063d4ab14480ac177" #var.ami
 
   instance_type   = var.vm_instance_type
   security_groups = concat(var.clients_sg, [aws_security_group.wordpress-servers-sg.id])
@@ -82,13 +85,22 @@ resource "aws_launch_configuration" "launch-conf" {
   lifecycle {
     create_before_destroy = true
   }
+
+  # tags = {
+  #   Name        = "${var.prefix_name}-servers"
+  #   Terraform   = "true"
+  #   Environment = "dev"
+  # }
 }
 
 ################################################################################
 # Autoscaling group
 ################################################################################
 resource "aws_autoscaling_group" "wordpress-autoscaling-group" {
-  name                 = "${var.prefix_name}-autoscaling-group"
+  # Force a redeployment when launch configuration changes.
+  # This will reset the desired capacity if it was changed due to
+  # autoscaling events.
+  name                 = "${aws_launch_configuration.launch-conf.name}-asg"
   launch_configuration = aws_launch_configuration.launch-conf.name
   min_size             = var.asg_min_size
   max_size             = var.asg_max_size
@@ -112,7 +124,7 @@ module "bastion" {
   source = "umotif-public/bastion/aws"
   version = "~> 2.1.0"
 
-  name_prefix    = "${var.prefix_name}-bastion"
+  name_prefix    = "${var.prefix_name}"
   ami_id         = var.ami
   vpc_id         = var.vpc_id
   public_subnets = var.public_subnets

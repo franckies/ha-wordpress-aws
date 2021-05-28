@@ -1,59 +1,44 @@
-#!/bin/bash
-EFS_MOUNT= "${EFS_MOUNT}"
+#!/bin/bash -xe
 
-DB_NAME= "${DB_NAME}"
-DB_HOSTNAME= "${DB_HOSTNAME}"
-DB_USERNAME= "${DB_USERNAME}"
-DB_PASSWORD= "${DB_PASSWORD}"
+EFS_MOUNT="${EFS_MOUNT}"
+
+DB_NAME="${DB_NAME}"
+DB_HOSTNAME="${DB_HOSTNAME}"
+DB_USERNAME="${DB_USERNAME}"
+DB_PASSWORD="${DB_PASSWORD}"
 
 WP_ADMIN="wordpressadmin"
 WP_PASSWORD="wordpressadminn"
 
 LB_HOSTNAME="${LB_HOSTNAME}"
 
-# sudo apt update
-# sudo apt install nginx
-# sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 $EFS_MOUNT:/ /usr/share/nginx/html/
-# sudo touch /usr/share/nginx/html/index.html
-# sudo echo 'Hello, this is my website' >> /usr/share/nginx/html/index.html
-# sudo systemctl nginx start
 
-# sudo apt update -y
-# sudo apt install -y httpd
-# sudo systemctl httpd start
-# wget https://wordpress.org/latest.tar.gz
-# tar -xzf latest.tar.gz
-# cd wordpress
-# cp wp-config-sample.php wp-config.php
+sudo yum update -y
+sudo yum install -y httpd
+sudo service httpd start
+#sudo yum install nfs-utils -y -q Should be already installed in aws linux 2 ami
+# Mounting Efs 
+sudo mount -t nfs -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport ${EFS_MOUNT}:/  /var/www/html
+# Making Mount Permanent
+echo ${EFS_MOUNT}:/ /var/www/html nfs4 defaults,_netdev 0 0  | sudo cat >> /etc/fstab
+sudo chmod go+rw /var/www/html
 
-# cat <<EOF > wp-config.php
-# define( 'DB_NAME', $DB_NAME );
+# Install wordpress
+sudo wget https://wordpress.org/latest.tar.gz
+tar -xzf latest.tar.gz
 
-# define( 'DB_USER', $DB_USERNAME );
+# Deploy wordpress
+sudo amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+sudo cp -r wordpress/* /var/www/html/
+sudo curl -o /bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+sudo chmod +x /bin/wp
+# Insert DB info to wordpress config file and install theme
+cd /var/www/html
+sudo wp core download --version='4.9' --locale='en_GB' --allow-root
+sudo wp core config --dbname="$DB_NAME" --dbuser="$DB_USERNAME" --dbpass="$DB_PASSWORD" --dbhost="$DB_HOSTNAME" --dbprefix=wp_ --allow-root
+sudo wp core install --url="http://$LB_HOSTNAME" --title='HA Wordpress on AWS' --admin_user="$WP_ADMIN" --admin_password="$WP_PASSWORD" --admin_email='admin@example.com' --allow-root
 
-# define( 'DB_PASSWORD', $DB_PASSWORD );
 
-# define( 'DB_HOST', $DB_HOSTNAME );
-
-# define('AUTH_KEY',         'aaaaaaaaaaaaaaaaaaa');
-# define('SECURE_AUTH_KEY',  'aaaaaaaaaaaaaaaaaaa');
-# define('LOGGED_IN_KEY',    'aaaaaaaaaaaaaaaaaaa');
-# define('NONCE_KEY',        'aaaaaaaaaaaaaaaaaaa');
-# define('AUTH_SALT',        'aaaaaaaaaaaaaaaaaaa');
-# define('SECURE_AUTH_SALT', 'aaaaaaaaaaaaaaaaaaa');
-# define('LOGGED_IN_SALT',   'aaaaaaaaaaaaaaaaaaa');
-# define('NONCE_SALT',       'aaaaaaaaaaaaaaaaaaa');
-# EOF
-
-# #Deploy wp
-# sudo apt install -y php7.0 libapache2-mod-php7.0 php7.0-mysql php7.0-xml php7.0-gd
-# sudo apt install -y php7.0-mysql mariadb-server mariadb-client
-# cd /home/ec2-user
-# sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 $EFS_MOUNT:/ /var/www/html
-# sudo cp -r wordpress/* /var/www/html/
-# sudo service httpd restart
-cd /home/ubuntu
-sudo apt update -y 
-sudo apt install -y nginx 
-sudo systemctl start nginx
-sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 $EFS_MOUNT:/ /usr/share/nginx/html
+# Restart httpd
+sudo chkconfig httpd on
+sudo service httpd start
