@@ -47,6 +47,11 @@ module "data" {
 }
 
 module "application" {
+  #Waits for RDS to be fully deployed in order to configure wordpress
+  depends_on = [
+    module.data,
+    module.networking
+  ]
   source                 = "./modules/application"
   vpc_id                = module.networking.vpc_id
   private_subnets       = module.networking.private_subnets

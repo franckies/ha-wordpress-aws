@@ -35,10 +35,21 @@ sudo chmod +x /bin/wp
 # Insert DB info to wordpress config file and install theme
 cd /var/www/html
 sudo wp core download --version='4.9' --locale='en_GB' --allow-root
-sudo wp core config --dbname="$DB_NAME" --dbuser="$DB_USERNAME" --dbpass="$DB_PASSWORD" --dbhost="$DB_HOSTNAME" --dbprefix=wp_ --allow-root
+
+# Loop until config wordpress file is created
+while [ ! -f /var/www/html/wp-config.php ]
+do
+    cd /var/www/html 
+    sudo wp core config --dbname="$DB_NAME" --dbuser="$DB_USERNAME" --dbpass="$DB_PASSWORD" --dbhost="$DB_HOSTNAME" --dbprefix=wp_ --allow-root
+    sleep 2
+done
+
 sudo wp core install --url="http://$LB_HOSTNAME" --title='HA Wordpress on AWS' --admin_user="$WP_ADMIN" --admin_password="$WP_PASSWORD" --admin_email='admin@example.com' --allow-root
 
 
 # Restart httpd
 sudo chkconfig httpd on
 sudo service httpd start
+sudo service httpd restart
+#Restart httpd after a while
+setsid nohup "sleep 480; sudo service httpd restart" &
